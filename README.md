@@ -77,7 +77,7 @@ bundle:
 
 includes:
   - bundle: amplifier-dev  # or your base bundle
-  - bundle: git+https://github.com/bkrabach/amplifier-bundle-a2a@main#subdirectory=behaviors/a2a.yaml
+  - bundle: git+https://github.com/microsoft/amplifier-bundle-a2a@main#subdirectory=behaviors/a2a.yaml
 
 hooks:
   - module: hooks-a2a-server
