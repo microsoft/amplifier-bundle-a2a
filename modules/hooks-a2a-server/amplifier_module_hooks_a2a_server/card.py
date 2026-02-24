@@ -1,6 +1,16 @@
 """Agent Card generation — builds the A2A identity document from config."""
 
+import getpass
 from typing import Any
+
+
+def _default_agent_name() -> str:
+    """Derive a default agent name from the OS username."""
+    try:
+        username = getpass.getuser()
+        return f"{username}'s Agent"
+    except Exception:
+        return "Amplifier Agent"
 
 
 def build_agent_card(config: dict[str, Any]) -> dict[str, Any]:
@@ -14,7 +24,7 @@ def build_agent_card(config: dict[str, Any]) -> dict[str, Any]:
     base_url = config.get("base_url", f"http://{host}:{port}")
 
     return {
-        "name": config.get("agent_name", "Amplifier Agent"),
+        "name": config.get("agent_name") or _default_agent_name(),
         "description": config.get("agent_description", "An Amplifier-powered agent"),
         "version": "1.0",
         "url": base_url,
