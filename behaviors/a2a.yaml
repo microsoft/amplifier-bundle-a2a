@@ -20,8 +20,6 @@ hooks:
     source: git+https://github.com/microsoft/amplifier-bundle-a2a@main#subdirectory=modules/hooks-a2a-server
     config:
       port: 8222
-      agent_name: "Amplifier Agent"
-      agent_description: "An Amplifier-powered agent"
       skills: []
       known_agents: []
 

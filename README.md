@@ -240,7 +240,7 @@ amplifier-bundle-a2a/
 │           ├── injection.py          # Mode B live injection handler
 │           ├── evaluation.py         # LLM confidence evaluation
 │           └── discovery.py          # mDNS advertisement
-└── tests/                            # 286 tests
+└── tests/                            # 290 tests
 ```
 
 ### How It Works
