@@ -1735,3 +1735,226 @@ class TestSendSenderIdentity:
             sender_url=None,
             sender_name=None,
         )
+
+
+class TestWhoamiOperation:
+    """Task 6: whoami returns agent identity and server status."""
+
+    @pytest.mark.asyncio
+    async def test_whoami_returns_agent_identity(self):
+        """Registry has card → returns name, url, server_running=True."""
+        from amplifier_module_tool_a2a import A2ATool
+
+        registry = _make_mock_registry()
+        registry.card = {
+            "name": "My Agent",
+            "url": "http://myagent:8222",
+            "description": "A helpful agent",
+            "capabilities": {"realtimeResponse": True},
+            "skills": [{"id": "chat", "name": "Chat"}],
+        }
+        registry.server_running = True
+        coordinator = _make_mock_coordinator(registry=registry)
+        tool = A2ATool(coordinator, {})
+
+        result = await tool.execute({"operation": "whoami"})
+        assert result.success is True
+        assert result.output is not None
+        assert result.output["name"] == "My Agent"
+        assert result.output["url"] == "http://myagent:8222"
+        assert result.output["server_running"] is True
+
+    @pytest.mark.asyncio
+    async def test_whoami_includes_realtime_response(self):
+        """Card has realtimeResponse capability → included in output."""
+        from amplifier_module_tool_a2a import A2ATool
+
+        registry = _make_mock_registry()
+        registry.card = {
+            "name": "Realtime Agent",
+            "url": "http://rt:8222",
+            "description": "",
+            "capabilities": {"realtimeResponse": True},
+            "skills": [],
+        }
+        registry.server_running = True
+        coordinator = _make_mock_coordinator(registry=registry)
+        tool = A2ATool(coordinator, {})
+
+        result = await tool.execute({"operation": "whoami"})
+        assert result.success is True
+        assert result.output is not None
+        assert result.output["realtimeResponse"] is True
+
+    @pytest.mark.asyncio
+    async def test_whoami_server_not_running(self):
+        """Registry with card but server_running=False → output includes server_running=False."""
+        from amplifier_module_tool_a2a import A2ATool
+
+        registry = _make_mock_registry()
+        registry.card = {
+            "name": "Offline Agent",
+            "url": "http://offline:8222",
+            "description": "Not running",
+            "capabilities": {},
+            "skills": [],
+        }
+        registry.server_running = False
+        coordinator = _make_mock_coordinator(registry=registry)
+        tool = A2ATool(coordinator, {})
+
+        result = await tool.execute({"operation": "whoami"})
+        assert result.success is True
+        assert result.output is not None
+        assert result.output["server_running"] is False
+        assert result.output["name"] == "Offline Agent"
+
+    @pytest.mark.asyncio
+    async def test_whoami_no_registry(self):
+        """No registry → returns server_running=False with message."""
+        from amplifier_module_tool_a2a import A2ATool
+
+        coordinator = _make_mock_coordinator(registry=None)
+        tool = A2ATool(coordinator, {})
+
+        result = await tool.execute({"operation": "whoami"})
+        assert result.success is True
+        assert result.output is not None
+        assert result.output["server_running"] is False
+        assert "message" in result.output
+
+    @pytest.mark.asyncio
+    async def test_whoami_no_card(self):
+        """Registry exists but card=None → returns server_running=False with message."""
+        from amplifier_module_tool_a2a import A2ATool
+
+        registry = _make_mock_registry()
+        registry.card = None
+        coordinator = _make_mock_coordinator(registry=registry)
+        tool = A2ATool(coordinator, {})
+
+        result = await tool.execute({"operation": "whoami"})
+        assert result.success is True
+        assert result.output is not None
+        assert result.output["server_running"] is False
+        assert "message" in result.output
+
+
+class TestAddContactOperation:
+    """Task 7: add_contact fetches remote card, adds contact, caches card."""
+
+    @pytest.mark.asyncio
+    async def test_add_contact_fetches_card_and_adds_to_contacts(self):
+        """Happy path: fetch card → add contact with correct name/tier."""
+        from amplifier_module_tool_a2a import A2ATool
+
+        remote_card = {
+            "name": "Remote Agent",
+            "url": "http://remote:8222",
+            "capabilities": {"realtimeResponse": True},
+            "skills": [{"id": "chat", "name": "Chat"}],
+        }
+        registry = _make_registry_with_stores()
+        coordinator = _make_mock_coordinator(registry=registry)
+        tool = A2ATool(coordinator, {})
+
+        tool.client = MagicMock()
+        tool.client.fetch_agent_card = AsyncMock(return_value=remote_card)
+
+        result = await tool.execute(
+            {"operation": "add_contact", "url": "http://remote:8222"}
+        )
+        assert result.success is True
+        assert result.output["name"] == "Remote Agent"
+        assert result.output["url"] == "http://remote:8222"
+        assert result.output["tier"] == "known"
+        registry.contact_store.add_contact.assert_awaited_once_with(
+            "http://remote:8222", "Remote Agent", "known"
+        )
+
+    @pytest.mark.asyncio
+    async def test_add_contact_caches_card(self):
+        """After add_contact, registry.cache_card was called with the fetched card."""
+        from amplifier_module_tool_a2a import A2ATool
+
+        remote_card = {
+            "name": "Remote Agent",
+            "url": "http://remote:8222",
+            "capabilities": {},
+            "skills": [],
+        }
+        registry = _make_registry_with_stores()
+        coordinator = _make_mock_coordinator(registry=registry)
+        tool = A2ATool(coordinator, {})
+
+        tool.client = MagicMock()
+        tool.client.fetch_agent_card = AsyncMock(return_value=remote_card)
+
+        await tool.execute({"operation": "add_contact", "url": "http://remote:8222"})
+        registry.cache_card.assert_called_once_with("http://remote:8222", remote_card)
+
+    @pytest.mark.asyncio
+    async def test_add_contact_requires_url(self):
+        """Missing url → error with helpful message."""
+        from amplifier_module_tool_a2a import A2ATool
+
+        registry = _make_registry_with_stores()
+        coordinator = _make_mock_coordinator(registry=registry)
+        tool = A2ATool(coordinator, {})
+
+        result = await tool.execute({"operation": "add_contact"})
+        assert result.success is False
+        assert result.error is not None
+        assert "url" in result.error["message"].lower()
+
+    @pytest.mark.asyncio
+    async def test_add_contact_with_custom_tier(self):
+        """tier='trusted' → contact added with trusted tier."""
+        from amplifier_module_tool_a2a import A2ATool
+
+        remote_card = {
+            "name": "Trusted Agent",
+            "url": "http://trusted:8222",
+            "capabilities": {},
+            "skills": [],
+        }
+        registry = _make_registry_with_stores()
+        coordinator = _make_mock_coordinator(registry=registry)
+        tool = A2ATool(coordinator, {})
+
+        tool.client = MagicMock()
+        tool.client.fetch_agent_card = AsyncMock(return_value=remote_card)
+
+        result = await tool.execute(
+            {
+                "operation": "add_contact",
+                "url": "http://trusted:8222",
+                "tier": "trusted",
+            }
+        )
+        assert result.success is True
+        assert result.output["tier"] == "trusted"
+        registry.contact_store.add_contact.assert_awaited_once_with(
+            "http://trusted:8222", "Trusted Agent", "trusted"
+        )
+
+    @pytest.mark.asyncio
+    async def test_add_contact_handles_unreachable_agent(self):
+        """client.fetch_agent_card raises ConnectionError → error with helpful message."""
+        from amplifier_module_tool_a2a import A2ATool
+
+        registry = _make_registry_with_stores()
+        coordinator = _make_mock_coordinator(registry=registry)
+        tool = A2ATool(coordinator, {})
+
+        tool.client = MagicMock()
+        tool.client.fetch_agent_card = AsyncMock(
+            side_effect=ConnectionError("Connection refused")
+        )
+
+        result = await tool.execute(
+            {"operation": "add_contact", "url": "http://unreachable:8222"}
+        )
+        assert result.success is False
+        assert result.error is not None
+        assert "unreachable:8222" in result.error["message"]

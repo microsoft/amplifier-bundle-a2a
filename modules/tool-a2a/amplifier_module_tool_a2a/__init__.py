@@ -64,7 +64,9 @@ class A2ATool:
             "'contacts' (list all contacts), 'trust' (update contact tier), "
             "'respond' (reply to a pending message), "
             "'dismiss' (dismiss a pending message), "
-            "'defer' (defer a pending message for later)."
+            "'defer' (defer a pending message for later), "
+            "'whoami' (show this agent's identity and URL), "
+            "'add_contact' (add a remote agent by URL)."
         )
 
     @property
@@ -87,6 +89,8 @@ class A2ATool:
                         "respond",
                         "dismiss",
                         "defer",
+                        "whoami",
+                        "add_contact",
                     ],
                     "description": "The operation to perform",
                 },
@@ -119,11 +123,15 @@ class A2ATool:
                         "If false, return task handle immediately."
                     ),
                 },
+                "url": {
+                    "type": "string",
+                    "description": "Agent URL for 'add_contact' operation",
+                },
                 "tier": {
                     "type": "string",
                     "description": (
                         "Trust tier: 'known' or 'trusted' "
-                        "(used by 'approve' and 'trust')"
+                        "(used by 'approve', 'trust', and 'add_contact')"
                     ),
                 },
             },
@@ -159,6 +167,10 @@ class A2ATool:
                 return await self._op_dismiss(input)
             elif operation == "defer":
                 return await self._op_defer(input)
+            elif operation == "whoami":
+                return await self._op_whoami()
+            elif operation == "add_contact":
+                return await self._op_add_contact(input)
             else:
                 return ToolResult(
                     success=False,
@@ -674,6 +686,82 @@ class A2ATool:
         return ToolResult(
             success=True,
             output=f"Message {task_id} dismissed.",
+        )
+
+    async def _op_whoami(self) -> ToolResult:
+        """Return this agent's identity and URL for sharing."""
+        if not self.registry or not self.registry.card:
+            return ToolResult(
+                success=True,
+                output={
+                    "server_running": False,
+                    "message": "A2A server is not running. No identity available.",
+                },
+            )
+
+        card = self.registry.card
+        return ToolResult(
+            success=True,
+            output={
+                "name": card.get("name", "Unknown"),
+                "url": card.get("url", "Unknown"),
+                "description": card.get("description", ""),
+                "realtimeResponse": card.get("capabilities", {}).get(
+                    "realtimeResponse", False
+                ),
+                "server_running": getattr(self.registry, "server_running", True),
+                "skills": card.get("skills", []),
+            },
+        )
+
+    async def _op_add_contact(self, input: dict[str, Any]) -> ToolResult:
+        """Add a remote agent as a contact by fetching their Agent Card."""
+        url = input.get("url", "").strip()
+        if not url:
+            return ToolResult(
+                success=False,
+                error={
+                    "message": (
+                        "URL required. Example: "
+                        "a2a(operation='add_contact', url='http://agent.local:8222')"
+                    )
+                },
+            )
+
+        tier = input.get("tier", "known")
+
+        # Fetch the remote agent's card to get their name and capabilities
+        try:
+            card = await self.client.fetch_agent_card(url)
+        except ConnectionError as e:
+            return ToolResult(
+                success=False,
+                error={"message": f"Could not reach agent at {url}: {e}"},
+            )
+
+        agent_name = card.get("name", "Unknown Agent")
+
+        # Add to contacts
+        stores = self._check_stores()
+        if stores:
+            return stores
+
+        await self.registry.contact_store.add_contact(url, agent_name, tier)
+
+        # Cache the card
+        if self.registry:
+            self.registry.cache_card(url, card)
+
+        return ToolResult(
+            success=True,
+            output={
+                "message": f"Added {agent_name} ({url}) as a {tier} contact.",
+                "name": agent_name,
+                "url": url,
+                "tier": tier,
+                "capabilities": card.get("capabilities", {}),
+                "skills": card.get("skills", []),
+            },
         )
 
     def _track_outgoing(self, task_id: str, agent_url: str, agent_name: str) -> None:
