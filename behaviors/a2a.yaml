@@ -3,6 +3,13 @@ bundle:
   version: 0.1.0
   description: A2A agent-to-agent communication — tool, server hook, and LLM context
 
+# Prevent the A2A server hook from loading in delegated sub-agent sessions.
+# The server should only run in the root session — sub-agents don't need their
+# own HTTP server and would collide on the port.
+spawn:
+  exclude_hooks:
+    - hooks-a2a-server
+
 tools:
   - module: tool-a2a
     source: git+https://github.com/microsoft/amplifier-bundle-a2a@main#subdirectory=modules/tool-a2a
