@@ -48,6 +48,8 @@ class A2ARegistry:
         self.contact_store: Any | None = None  # Set by mount()
         self.pending_queue: Any | None = None  # Set by mount()
         self.deferred_ids: set[str] = set()
+        self.card: dict[str, Any] | None = None  # Set by mount()
+        self.server_running: bool = True  # Set to False on port collision
 
     def get_agents(self) -> list[dict[str, Any]]:
         """Return all known agents as a list of dicts."""

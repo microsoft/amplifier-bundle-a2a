@@ -224,6 +224,37 @@ class TestTaskAttribution:
         assert task2["attribution"] == "autonomous"
 
 
+class TestCardAndServerRunningAttributes:
+    """Tests for card and server_running attributes."""
+
+    def test_registry_has_card_attribute_none_by_default(self):
+        from amplifier_module_hooks_a2a_server.registry import A2ARegistry
+
+        registry = A2ARegistry()
+        assert registry.card is None
+
+    def test_registry_card_can_be_set(self):
+        from amplifier_module_hooks_a2a_server.registry import A2ARegistry
+
+        registry = A2ARegistry()
+        card = {"name": "TestAgent", "version": "1.0", "skills": []}
+        registry.card = card
+        assert registry.card is card
+
+    def test_registry_has_server_running_true_by_default(self):
+        from amplifier_module_hooks_a2a_server.registry import A2ARegistry
+
+        registry = A2ARegistry()
+        assert registry.server_running is True
+
+    def test_registry_server_running_can_be_set_false(self):
+        from amplifier_module_hooks_a2a_server.registry import A2ARegistry
+
+        registry = A2ARegistry()
+        registry.server_running = False
+        assert registry.server_running is False
+
+
 class TestDataLayerAttributes:
     """Tests for contact_store and pending_queue attributes."""
 
