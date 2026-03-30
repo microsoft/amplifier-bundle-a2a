@@ -311,6 +311,17 @@ python demo_a2a.py
 
 Starts two agents on localhost and demonstrates Mode A (human-in-the-loop), Mode C (autonomous), and first-contact approval — all with real HTTP.
 
+## Getting Help
+
+For general Amplifier questions and discussion:
+
+- [Amplifier GitHub](https://github.com/microsoft/amplifier)
+- [Amplifier Documentation](https://github.com/microsoft/amplifier/tree/main/docs)
+
+For questions about the A2A protocol itself:
+
+- [A2A Protocol Specification](https://a2a-protocol.org/)
+
 ## Contributing
 
 This project welcomes contributions and suggestions. Most contributions require you to agree to a
