@@ -3,7 +3,10 @@ name = "amplifier-module-hooks-a2a-server"
 version = "0.1.0"
 description = "A2A protocol server — receives messages from remote agents"
 requires-python = ">=3.11"
-dependencies = ["aiohttp>=3.9.0"]
+# zeroconf is required for mDNS/LAN discovery (the default discovery path).
+# Declared here so `amplifier bundle add` installs it automatically and LAN
+# discovery works out of the box instead of silently degrading.
+dependencies = ["aiohttp>=3.9.0", "zeroconf>=0.100.0"]
 
 [project.entry-points."amplifier.modules"]
 hooks-a2a-server = "amplifier_module_hooks_a2a_server:mount"
