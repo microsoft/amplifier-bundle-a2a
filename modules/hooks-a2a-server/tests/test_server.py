@@ -170,6 +170,7 @@ class TestMount:
 
         coordinator = _make_mock_coordinator(parent_id=None)
         config = {
+            "enabled": True,
             "port": 0,
             "host": "127.0.0.1",
             "agent_name": "Mount Test",
@@ -201,11 +202,31 @@ class TestMount:
         from amplifier_module_hooks_a2a_server import mount
 
         coordinator = _make_mock_coordinator(parent_id="parent-123")
-        await mount(coordinator, {"port": 0})
+        # enabled=True so this exercises the child-session (parent_id) guard,
+        # not the opt-in gate.
+        await mount(coordinator, {"enabled": True, "port": 0})
 
         # Should NOT register anything
         coordinator.register_capability.assert_not_called()
         coordinator.register_cleanup.assert_not_called()
+
+    async def test_mount_inert_when_not_enabled(self):
+        """Opt-in gate: without `enabled: true`, mount must do nothing."""
+        from amplifier_module_hooks_a2a_server import mount
+
+        # No `enabled` key at all -> server stays inert.
+        coordinator = _make_mock_coordinator(parent_id=None)
+        await mount(
+            coordinator, {"port": 0, "host": "127.0.0.1", "agent_name": "Inert"}
+        )
+        coordinator.register_capability.assert_not_called()
+        coordinator.register_cleanup.assert_not_called()
+
+        # Explicit enabled=False -> also inert.
+        coordinator2 = _make_mock_coordinator(parent_id=None)
+        await mount(coordinator2, {"enabled": False, "port": 0})
+        coordinator2.register_capability.assert_not_called()
+        coordinator2.register_cleanup.assert_not_called()
 
     async def test_mount_sets_server_running_false_on_port_collision(self):
         from unittest.mock import AsyncMock, patch
@@ -213,7 +234,12 @@ class TestMount:
         from amplifier_module_hooks_a2a_server import mount
 
         coordinator = _make_mock_coordinator(parent_id=None)
-        config = {"port": 9999, "host": "127.0.0.1", "agent_name": "Test"}
+        config = {
+            "enabled": True,
+            "port": 9999,
+            "host": "127.0.0.1",
+            "agent_name": "Test",
+        }
 
         with patch(
             "amplifier_module_hooks_a2a_server.server.A2AServer.start",
@@ -234,7 +260,12 @@ class TestMount:
         from amplifier_module_hooks_a2a_server import mount
 
         coordinator = _make_mock_coordinator(parent_id=None)
-        config = {"port": 7777, "host": "127.0.0.1", "agent_name": "Test"}
+        config = {
+            "enabled": True,
+            "port": 7777,
+            "host": "127.0.0.1",
+            "agent_name": "Test",
+        }
 
         with (
             patch(
@@ -256,6 +287,7 @@ class TestMount:
 
         coordinator = _make_mock_coordinator(parent_id=None)
         config = {
+            "enabled": True,
             "port": 0,
             "host": "127.0.0.1",
             "agent_name": "Card Storage Test",
@@ -282,6 +314,7 @@ class TestMount:
 
         coordinator = _make_mock_coordinator(parent_id=None)
         config = {
+            "enabled": True,
             "port": 0,
             "host": "127.0.0.1",
             "agent_name": "Custom Agent Name",

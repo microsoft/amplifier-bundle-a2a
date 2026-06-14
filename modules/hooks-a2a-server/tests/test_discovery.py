@@ -111,6 +111,7 @@ class TestMountMdnsIntegration:
             ) as mock_unadvertise,
         ):
             config = {
+                "enabled": True,
                 "port": 0,
                 "host": "127.0.0.1",
                 "agent_name": "mDNS Test Agent",
@@ -150,6 +151,7 @@ class TestMountMdnsIntegration:
             "amplifier_module_hooks_a2a_server.discovery.advertise_mdns",
         ) as mock_advertise:
             config = {
+                "enabled": True,
                 "port": 0,
                 "host": "127.0.0.1",
                 "agent_name": "No mDNS Agent",
