@@ -65,46 +65,57 @@ CLI sessions are async by default — the `realtimeResponse` capability in the A
 
 ## Installation
 
-### Add to your bundle
+### 1. Install the behavior globally (recommended)
 
-Create a `.amplifier/bundle.md` in your project directory:
+Add the **behavior** (not the root bundle) at **app scope**, so a2a is available in every session no matter which primary bundle you run:
+
+```bash
+amplifier bundle add \
+  git+https://github.com/microsoft/amplifier-bundle-a2a@main#subdirectory=behaviors/a2a.yaml \
+  --app
+```
+
+This installs the `tool-a2a` client and the `hooks-a2a-server` server, and pulls in `zeroconf` automatically so LAN/mDNS discovery works out of the box.
+
+**The server is dormant by default.** Installing it does *not* start an HTTP server or advertise you on the network — nothing listens until you explicitly enable it in a directory (next step). That's what makes app scope safe: a2a is available everywhere, but only *running* where you say so.
+
+### 2. Set up — the easy way: type `/a2a`
+
+Once the behavior is installed (step 1), just run the setup wizard in the folder you
+want to use a2a in:
+
+```
+/a2a
+```
+
+It walks you through it in plain language — names your assistant, picks a free port,
+turns on automatic discovery, and adds any contacts you want — then saves the setup
+for that folder. You don't need to know anything below; the wizard writes it for you.
+
+### Manual setup (what `/a2a` writes for you)
+
+Prefer to do it by hand, or want to see exactly what gets configured? In a project
+where you want to send/receive, turn the server on by overriding the `hooks-a2a-server`
+config in that project's `.amplifier/settings.yaml`:
 
 ```yaml
----
-bundle:
-  name: my-a2a-session
-  version: 0.1.0
-
-includes:
-  - bundle: amplifier-dev  # or your base bundle
-  - bundle: git+https://github.com/microsoft/amplifier-bundle-a2a@main#subdirectory=behaviors/a2a.yaml
-
-hooks:
-  - module: hooks-a2a-server
+overrides:
+  hooks-a2a-server:
     config:
-      port: 8222
+      enabled: true                 # required — the server stays inert without this
       agent_name: "My Agent"
       agent_description: "My personal assistant"
+      port: 8222
       discovery:
-        mdns: true
+        mdns: true                  # LAN auto-discovery (zeroconf is installed by default)
       known_agents:
         - name: "Friend's Agent"
           url: "http://friend-laptop.local:8223"
-
-tools:
-  - module: tool-a2a
-    config: {}  # sender identity auto-derived from hook
----
 ```
 
-Then set it as your active bundle in `.amplifier/settings.yaml`:
+A project-level `.amplifier/settings.yaml` overrides your global settings, so each directory gets its own a2a identity, port, and contacts. Because this file holds your machine-specific identity and contact list, keep it **local** — add `.amplifier/settings.yaml` (or `.amplifier/`) to `.gitignore` in shared repos rather than committing it.
 
-```yaml
-bundle:
-  active: my-a2a-session
-  added:
-    my-a2a-session: "file:///path/to/your/project/.amplifier"
-```
+> **Crossing networks?** mDNS only finds peers on the same LAN. For Tailscale / VPN / internet, list peers under `known_agents` with a reachable URL instead of relying on discovery.
 
 ### For local development
 
@@ -245,7 +256,7 @@ amplifier-bundle-a2a/
 
 ### How It Works
 
-1. **On session start**, the hook module starts an HTTP server and advertises via mDNS
+1. **On session start**, *if `enabled: true`*, the hook module starts an HTTP server and advertises via mDNS (it stays inert otherwise)
 2. **When sending**, the tool resolves the agent URL, fetches the Agent Card, and sends via HTTP
 3. **When receiving**, the server checks the sender against the contact list, routes to Mode C (autonomous) or Mode A (queue for user), and returns an A2A task
 4. **For live sessions**, the injection handler presents pending messages on each LLM turn (Mode B)
@@ -257,6 +268,7 @@ amplifier-bundle-a2a/
 
 | Option | Default | Description |
 |--------|---------|-------------|
+| `enabled` | `false` | **Master switch.** The server stays inert (no HTTP server, no mDNS) until set `true`. Lets you install the behavior globally (`--app`) and opt in per directory |
 | `port` | `8222` | HTTP server port. If port 8222 is in use, you'll see a clear error suggesting a different port |
 | `host` | `0.0.0.0` | Bind address |
 | `agent_name` | `"$USER's Agent"` | Display name in Agent Card. Defaults to `$USER's Agent` (e.g., "bkrabach's Agent") |

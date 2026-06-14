@@ -23,6 +23,19 @@ async def mount(coordinator: Any, config: dict[str, Any] | None = None) -> None:
     """
     config = config or {}
 
+    # Opt-in gate: the server is INERT unless explicitly enabled.
+    # This lets the a2a behavior be installed globally (e.g. `amplifier bundle add
+    # ...#subdirectory=behaviors/a2a.yaml --app`) while staying dormant in every
+    # session until a directory opts in. Turn it on per-directory by overriding
+    # this module's config in that project's .amplifier/settings.yaml with
+    # `enabled: true` plus your agent_name/port/known_agents.
+    if not config.get("enabled", False):
+        logger.debug(
+            "A2A server not enabled \u2014 skipping. Set hooks-a2a-server config "
+            "'enabled: true' (e.g. in a project's .amplifier/settings.yaml) to activate."
+        )
+        return
+
     # Don't start the server in child sessions (e.g., Mode C spawned sessions)
     if coordinator.parent_id:
         logger.debug("Skipping A2A server in child session %s", coordinator.session_id)
@@ -79,11 +92,23 @@ async def mount(coordinator: Any, config: dict[str, Any] | None = None) -> None:
         return
 
     # Start mDNS advertisement if enabled
-    from .discovery import advertise_mdns, unadvertise_mdns
+    from .discovery import ZEROCONF_AVAILABLE, advertise_mdns, unadvertise_mdns
 
     mdns_handle = None
     discovery_config = config.get("discovery", {})
     if discovery_config.get("mdns", True):  # Default: enabled
+        if not ZEROCONF_AVAILABLE:
+            # Fail loud, not silent: the user asked for LAN discovery but it
+            # can't run. 'zeroconf' is a declared dependency, so this should
+            # only happen in a broken/partial environment.
+            logger.warning(
+                "A2A: mDNS/LAN discovery is enabled but the 'zeroconf' package is "
+                "not installed \u2014 this agent will NOT be discoverable on the local "
+                "network. Install it with `uv pip install zeroconf` (or reinstall the "
+                "hooks-a2a-server module). To intentionally disable LAN discovery and "
+                "silence this warning, set hooks-a2a-server config "
+                "'discovery: {mdns: false}'."
+            )
         server_port = server.port or 0
         mdns_handle = await advertise_mdns(
             agent_name=config.get("agent_name", "Amplifier Agent"),

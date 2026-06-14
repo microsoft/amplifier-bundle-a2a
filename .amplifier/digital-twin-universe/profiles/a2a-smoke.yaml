@@ -1,0 +1,119 @@
+# =============================================================================
+# a2a-smoke -- repeatable DTU validation for amplifier-bundle-a2a
+# =============================================================================
+#
+# Validates the a2a bundle end-to-end as a real user would: install the CLI,
+# app-scope the a2a behavior, and verify the opt-in server gate + /a2a setup
+# mode in a realistic Amplifier environment.
+#
+# WHAT THIS PROVES (acceptance checks, see repo SMOKE_TESTS.md):
+#   A. Behavior installs/composes cleanly when app-scoped; zeroconf present.
+#   B. The /a2a setup mode is discoverable once the behavior is composed.
+#   C. Opt-in gate OFF  -> no a2a config => server is INERT (port 8222 unbound).
+#   D. Opt-in gate ON   -> enabled:true  => server binds + agent card responds.
+#
+# OUT-OF-BAND STATE REQUIRED (this profile is NOT fully self-contained):
+#   This profile installs amplifier-bundle-a2a from a local Gitea mirror so it
+#   can test UNPUBLISHED working-tree changes. You must stand up Gitea and
+#   mirror the repo first (see amplifier-gitea), then launch with:
+#
+#     amplifier-digital-twin launch a2a-smoke.yaml \
+#       --var GITEA_URL=http://<host-ip>:<port> \
+#       --var GITEA_TOKEN=<token> \
+#       --name a2a-smoke
+#
+#   To validate the PUBLISHED bundle instead, drop the url_rewrites block and
+#   the --var flags -- the github.com URLs below resolve to upstream directly.
+#
+#   ANTHROPIC_API_KEY must be set on the host (forwarded via passthrough) so
+#   the smoke session can reach an LLM. Swap the provider block if you use a
+#   different provider.
+# =============================================================================
+name: a2a-smoke
+description: >
+  Repeatable end-to-end validation of amplifier-bundle-a2a: app-scoped install,
+  /a2a mode discovery, and the opt-in server gate (off=inert, on=bound).
+
+base:
+  image: ubuntu:24.04
+
+# Redirect the a2a bundle (and its subdirectory module installs) to the local
+# Gitea mirror so unpublished working-tree changes are what gets tested.
+# boundary mode keeps the rule scoped to this one repo.
+url_rewrites:
+  auth:
+    username: admin
+    token_var: GITEA_TOKEN
+  allow_uv_github_fast_path: false
+  default_match_mode: boundary
+  rules:
+    - match: github.com/microsoft/amplifier-bundle-a2a
+      target: ${GITEA_URL}/admin/amplifier-bundle-a2a
+
+# ANTHROPIC_API_KEY forwarded from host so the smoke session can reach the LLM.
+passthrough:
+  allow_external: true
+  services:
+    - name: anthropic
+      key_env: ANTHROPIC_API_KEY
+
+provision:
+  setup_cmds:
+    # System deps + uv + Amplifier CLI (upstream; a2a is the only rewritten repo)
+    - apt-get update && apt-get install -y git curl
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - uv tool install git+https://github.com/microsoft/amplifier
+
+    # Provider config so sessions can reach the LLM (first-run wizard skipped).
+    - |
+      mkdir -p /root/.amplifier
+      cat > /root/.amplifier/settings.yaml << EOF
+      config:
+        providers:
+          - module: provider-anthropic
+            source: git+https://github.com/microsoft/amplifier-module-provider-anthropic@main
+            config:
+              api_key: ${ANTHROPIC_API_KEY}
+      EOF
+
+    # App-scope the a2a behavior: present in every session, but INERT until a
+    # directory opts in (the change under test). url_rewrites sends this to Gitea.
+    - amplifier bundle add git+https://github.com/microsoft/amplifier-bundle-a2a@main#subdirectory=behaviors/a2a.yaml --app
+
+    # ---- Test fixture: gate OFF dir (no a2a config => server must stay inert) -
+    - mkdir -p /root/a2a-off
+
+    # ---- Test fixture: gate ON dir (.amplifier/settings.yaml flips enabled:true)
+    # Providers are repeated here so the project settings work whether amplifier
+    # merges or replaces the home settings; overrides flips the server on.
+    - |
+      mkdir -p /root/a2a-on/.amplifier
+      cat > /root/a2a-on/.amplifier/settings.yaml << EOF
+      config:
+        providers:
+          - module: provider-anthropic
+            source: git+https://github.com/microsoft/amplifier-module-provider-anthropic@main
+            config:
+              api_key: ${ANTHROPIC_API_KEY}
+      overrides:
+        hooks-a2a-server:
+          config:
+            enabled: true
+            port: 8222
+            agent_name: "A2A Smoke Agent"
+            discovery:
+              mdns: true
+      EOF
+
+    # Sanity checks
+    - amplifier --version
+    - amplifier bundle list
+
+update:
+  cmds:
+    - rm -rf /root/.amplifier/cache/
+    - amplifier update --yes --force
+
+readiness:
+  - name: amplifier-installed
+    command: amplifier --version

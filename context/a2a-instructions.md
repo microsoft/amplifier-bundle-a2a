@@ -2,6 +2,8 @@
 
 You have access to the `a2a` tool for communicating with remote Amplifier agents on the network.
 
+**Not set up yet?** If the user wants to use a2a here but this directory has no a2a configuration (the server is inert until enabled per-directory), point them at the `/a2a` setup wizard — it walks them through it in plain language. You don't need to know the config details to suggest it.
+
 ## Operations
 
 ### Sending Messages
