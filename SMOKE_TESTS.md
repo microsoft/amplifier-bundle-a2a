@@ -21,6 +21,11 @@ Launch it (validates a local working-tree mirror via Gitea):
       --var GITEA_URL=http://<host-ip>:<port> --var GITEA_TOKEN=<token> \
       --name a2a-smoke
 
+The mirror reflects your **committed** branch state — `git commit` your fix before
+launching, or the DTU will test stale code. This is the supported way to exercise an
+unmerged branch in a real session (source overrides do NOT redirect app-scoped
+modules; see `AGENTS.md` pitfalls).
+
 Drop the `url_rewrites` + `--var` flags (see the profile's header comment) to
 validate the **published** bundle from GitHub instead of a local mirror.
 
@@ -40,6 +45,7 @@ most changes).
 
 ## Last verified
 
-2026-06-14, branch `feat/opt-in-gate-and-zeroconf` (DTU instance `a2a-smoke`):
-A–D **PASS**, E N/A. `zeroconf 0.149.16` auto-installed; agent card returned HTTP 200
-when enabled; port 8222 stayed inert when unconfigured.
+2026-06-15, branch `fix/validator-double-mount` (DTU instance `a2a-smoke`):
+A–D **PASS**, E N/A. `zeroconf 0.149.16` auto-installed; gate ON → 8222 bound at ~52s
+and `GET /.well-known/agent.json` → HTTP 200; gate OFF → 8222 stayed inert. This run
+also confirmed the hook-validator double-mount fix (see `KNOWN_ISSUES.md`).
