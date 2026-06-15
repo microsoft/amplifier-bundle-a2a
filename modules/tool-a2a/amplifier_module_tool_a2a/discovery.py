@@ -1,4 +1,4 @@
-"""mDNS service browsing via Zeroconf — discovers A2A agents on the LAN."""
+"""mDNS service browsing via Zeroconf — discovers A2A agents on the LAN (async API)."""
 
 import asyncio
 import logging
@@ -7,7 +7,11 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 try:
-    from zeroconf import ServiceBrowser, Zeroconf  # pyright: ignore[reportMissingImports]
+    from zeroconf import ServiceInfo  # pyright: ignore[reportMissingImports]  # noqa: F401
+    from zeroconf.asyncio import (  # pyright: ignore[reportMissingImports]
+        AsyncServiceBrowser,
+        AsyncZeroconf,
+    )
 
     ZEROCONF_AVAILABLE = True
 except ImportError:
@@ -49,7 +53,10 @@ class _BrowseListener:
 
 
 async def browse_mdns(timeout: float = 2.0) -> list[dict[str, Any]]:
-    """Browse the local network for A2A agents via mDNS.
+    """Browse the local network for A2A agents via mDNS (async API, safe inside asyncio.run).
+
+    Uses AsyncZeroconf + AsyncServiceBrowser so close() is awaitable and does not
+    raise EventLoopBlocked when called from inside a running asyncio event loop.
 
     Args:
         timeout: How long to listen for services (seconds). Default: 2.0
@@ -63,14 +70,18 @@ async def browse_mdns(timeout: float = 2.0) -> list[dict[str, Any]]:
         return []
 
     try:
-        zc = Zeroconf()  # type: ignore[reportPossiblyUnbound]
+        aiozc = AsyncZeroconf()  # type: ignore[reportPossiblyUnbound]
         listener = _BrowseListener()
-        browser = ServiceBrowser(zc, SERVICE_TYPE, listener)  # type: ignore[reportPossiblyUnbound]
+        # AsyncServiceBrowser expects the underlying Zeroconf; listeners are still
+        # called synchronously from its background thread.
+        browser = AsyncServiceBrowser(  # type: ignore[reportPossiblyUnbound]
+            aiozc.zeroconf, SERVICE_TYPE, listener
+        )
 
         await asyncio.sleep(timeout)
 
         browser.cancel()
-        zc.close()
+        await aiozc.async_close()
 
         return listener.found
     except Exception as e:

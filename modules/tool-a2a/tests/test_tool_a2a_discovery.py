@@ -38,20 +38,68 @@ def _make_mock_registry(agents=None):
 # ---------------------------------------------------------------------------
 
 
+class TestBrowseMdnsAsyncApi:
+    """TDD tests: browse_mdns must use AsyncZeroconf to avoid EventLoopBlocked.
+
+    Confirmed root cause: Zeroconf().close() (and similar sync calls) raise
+    EventLoopBlocked when called from inside a running asyncio event loop.
+    Fix: switch to AsyncZeroconf + AsyncServiceBrowser + await async_close().
+
+    These tests are RED before the fix and GREEN after.
+    """
+
+    @pytest.mark.asyncio
+    async def test_browse_uses_async_zeroconf_and_awaits_close(self):
+        """browse_mdns must use AsyncZeroconf and await async_close.
+
+        TDD: FAILS before fix — code uses Zeroconf() (sync) so AsyncZeroconf
+        is never instantiated and async_close is never awaited.
+        PASSES after fix — code uses AsyncZeroconf and awaits async_close.
+        """
+        from amplifier_module_tool_a2a.discovery import browse_mdns
+
+        mock_aiozc = AsyncMock()
+
+        with (
+            patch(
+                "amplifier_module_tool_a2a.discovery.AsyncZeroconf",
+                return_value=mock_aiozc,
+                create=True,  # name may not exist pre-fix
+            ),
+            patch(
+                "amplifier_module_tool_a2a.discovery.AsyncServiceBrowser",
+                MagicMock(),
+                create=True,  # name may not exist pre-fix
+            ),
+            patch(
+                "amplifier_module_tool_a2a.discovery.ZEROCONF_AVAILABLE",
+                True,
+            ),
+        ):
+            result = await browse_mdns(timeout=0.01)
+
+        mock_aiozc.async_close.assert_awaited_once()
+        assert isinstance(result, list)
+
+
 class TestBrowseMdns:
     """Tests for the browse_mdns function in discovery.py."""
 
     @pytest.mark.asyncio
     async def test_browse_returns_empty_when_no_services(self):
-        """Mock Zeroconf with no services found -> empty list."""
+        """Mock AsyncZeroconf with no services found -> empty list."""
         from amplifier_module_tool_a2a.discovery import browse_mdns
 
+        mock_aiozc = AsyncMock()
+
         with (
-            patch("amplifier_module_tool_a2a.discovery.Zeroconf") as mock_zc_cls,
-            patch("amplifier_module_tool_a2a.discovery.ServiceBrowser"),
+            patch(
+                "amplifier_module_tool_a2a.discovery.AsyncZeroconf",
+                return_value=mock_aiozc,
+            ),
+            patch("amplifier_module_tool_a2a.discovery.AsyncServiceBrowser"),
             patch("amplifier_module_tool_a2a.discovery.ZEROCONF_AVAILABLE", True),
         ):
-            mock_zc_cls.return_value = MagicMock()
             result = await browse_mdns(timeout=0.01)
             assert result == []
 
@@ -66,12 +114,12 @@ class TestBrowseMdns:
 
     @pytest.mark.asyncio
     async def test_browse_catches_exceptions(self):
-        """Mock Zeroconf to raise -> empty list, no crash."""
+        """Mock AsyncZeroconf to raise -> empty list, no crash."""
         from amplifier_module_tool_a2a.discovery import browse_mdns
 
         with (
             patch(
-                "amplifier_module_tool_a2a.discovery.Zeroconf",
+                "amplifier_module_tool_a2a.discovery.AsyncZeroconf",
                 side_effect=RuntimeError("network down"),
             ),
             patch("amplifier_module_tool_a2a.discovery.ZEROCONF_AVAILABLE", True),
