@@ -3,10 +3,12 @@ name = "amplifier-module-tool-a2a"
 version = "0.1.0"
 description = "A2A protocol client tool — send messages to remote agents"
 requires-python = ">=3.11"
-# zeroconf is required for mDNS/LAN discovery (a2a(operation="discover")).
-# Declared here so `amplifier bundle add` installs it automatically and LAN
-# discovery works out of the box instead of silently returning no agents.
-dependencies = ["aiohttp>=3.9.0", "zeroconf>=0.100.0"]
+dependencies = ["aiohttp>=3.9.0"]
+
+[project.optional-dependencies]
+# mDNS/Zeroconf LAN discovery is optional and gracefully degrades when absent.
+# Install with the `mdns` extra to enable automatic same-LAN agent discovery.
+mdns = ["zeroconf>=0.131.0"]
 
 [project.entry-points."amplifier.modules"]
 tool-a2a = "amplifier_module_tool_a2a:mount"
