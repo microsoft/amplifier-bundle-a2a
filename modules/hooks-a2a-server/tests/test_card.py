@@ -100,3 +100,55 @@ class TestDefaultAgentName:
         ):
             card = build_agent_card({})
         assert card["name"] == "Amplifier Agent"
+
+
+class TestMdnsHostnameUrl:
+    """Verify that build_agent_card advertises the mDNS-resolvable .local hostname.
+
+    When host is 0.0.0.0 (listen-all), the card URL must use <hostname>.local so
+    peers without static IPs can reach us via mDNS — not a bare hostname that only
+    resolves locally.
+    """
+
+    def test_bare_hostname_gets_local_appended(self):
+        """host=0.0.0.0, gethostname='spark-1' -> URL uses 'spark-1.local'."""
+        from amplifier_module_hooks_a2a_server.card import build_agent_card
+
+        with patch(
+            "amplifier_module_hooks_a2a_server.card.socket.gethostname",
+            return_value="spark-1",
+        ):
+            card = build_agent_card({})
+        assert card["url"] == "http://spark-1.local:8222"
+        assert card["supportedInterfaces"][0]["url"] == "http://spark-1.local:8222"
+
+    def test_hostname_already_ending_in_local_is_not_doubled(self):
+        """gethostname already returns 'spark-1.local' -> stays 'spark-1.local' (no double)."""
+        from amplifier_module_hooks_a2a_server.card import build_agent_card
+
+        with patch(
+            "amplifier_module_hooks_a2a_server.card.socket.gethostname",
+            return_value="spark-1.local",
+        ):
+            card = build_agent_card({})
+        assert card["url"] == "http://spark-1.local:8222"
+        assert ".local.local" not in card["url"]
+
+    def test_explicit_base_url_overrides_local_logic(self):
+        """Explicit base_url in config is used verbatim — .local logic doesn't run."""
+        from amplifier_module_hooks_a2a_server.card import build_agent_card
+
+        with patch(
+            "amplifier_module_hooks_a2a_server.card.socket.gethostname",
+            return_value="spark-1",
+        ):
+            card = build_agent_card({"base_url": "http://192.168.1.99:9000"})
+        assert card["url"] == "http://192.168.1.99:9000"
+
+    def test_explicit_host_ip_is_used_verbatim(self):
+        """host='192.168.1.5' (not 0.0.0.0) -> URL uses the IP, no .local appended."""
+        from amplifier_module_hooks_a2a_server.card import build_agent_card
+
+        card = build_agent_card({"host": "192.168.1.5"})
+        assert card["url"] == "http://192.168.1.5:8222"
+        assert ".local" not in card["url"]
