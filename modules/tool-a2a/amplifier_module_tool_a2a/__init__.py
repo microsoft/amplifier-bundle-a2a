@@ -824,11 +824,14 @@ class A2ATool:
                 "dismissed": "Dismissed by the user",
             }.get(attribution, f"Attribution: {attribution}")
 
+            response_line = (
+                f'Response: "{response_text}"' if response_text else "No response text"
+            )
             parts.append(
                 f"<a2a-response>\n"
                 f"Response from {agent_name} (task {task_id[:12]}...):\n"
                 f"Status: {status}\n"
-                f"{f'Response: "{response_text}"' if response_text else 'No response text'}\n"
+                f"{response_line}\n"
                 f"({attr_display})\n"
                 f"</a2a-response>"
             )
