@@ -27,6 +27,11 @@ def build_agent_card(config: dict[str, Any]) -> dict[str, Any]:
     if host == "0.0.0.0":
         try:
             url_host = socket.gethostname()
+            # Advertise the mDNS-resolvable .local name so peers can reach us
+            # without static IPs.  discovery.py already uses "<hostname>.local."
+            # for the mDNS record — keep the card URL consistent with that.
+            if not url_host.endswith(".local"):
+                url_host = f"{url_host}.local"
         except Exception:
             url_host = "127.0.0.1"
     else:

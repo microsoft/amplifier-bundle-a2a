@@ -79,18 +79,20 @@ This installs the `tool-a2a` client and the `hooks-a2a-server` server, and pulls
 
 **The server is dormant by default.** Installing it does *not* start an HTTP server or advertise you on the network — nothing listens until you explicitly enable it in a directory (next step). That's what makes app scope safe: a2a is available everywhere, but only *running* where you say so.
 
-### 2. Set up — the easy way: type `/a2a`
+### 2. The easy way: type `/a2a`
 
-Once the behavior is installed (step 1), just run the setup wizard in the folder you
-want to use a2a in:
+Once the behavior is installed (step 1), `/a2a` is your a2a expert for the folder you're
+in:
 
 ```
 /a2a
 ```
 
-It walks you through it in plain language — names your assistant, picks a free port,
-turns on automatic discovery, and adds any contacts you want — then saves the setup
-for that folder. You don't need to know anything below; the wizard writes it for you.
+It handles the whole experience in plain language — **setup** (names your assistant, picks
+a free port, turns on automatic discovery, adds contacts), **status** ("what's my address?"),
+**connecting** to someone, and **troubleshooting** when a message won't go through (including
+the extra networking steps on WSL). You don't need to know anything below; `/a2a` writes and
+checks it for you.
 
 ### Manual setup (what `/a2a` writes for you)
 

@@ -34,7 +34,7 @@ validate the **published** bundle from GitHub instead of a local mirror.
 | # | Check | Pass = |
 |---|-------|--------|
 | A | App-install composes; `zeroconf` auto-present | `amplifier bundle list` shows `a2a` (app); `zeroconf` in the amplifier env |
-| B | `/a2a` mode is discoverable | a session's `mode(list)` includes `a2a-setup` after the behavior is app-composed |
+| B | `/a2a` mode is discoverable | a session's `mode(list)` includes `a2a` after the behavior is app-composed |
 | C | **Opt-in gate OFF** | a dir with no a2a config → port 8222 **never binds** (server stays inert) |
 | D | **Opt-in gate ON** | a dir whose `.amplifier/settings.yaml` sets `hooks-a2a-server.config.enabled: true` → 8222 listening; `GET /.well-known/agent.json` → HTTP 200 |
 | E | (stretch) two agents exchange a message | needs two reachable, mutually-configured agents — best-effort, not required |

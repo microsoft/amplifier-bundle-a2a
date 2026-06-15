@@ -1958,3 +1958,90 @@ class TestAddContactOperation:
         assert result.success is False
         assert result.error is not None
         assert "unreachable:8222" in result.error["message"]
+
+
+class TestBuildResponseInjectionFormatting:
+    """Verify _build_response_injection output — and that the module compiles on Python 3.11.
+
+    The f-string at line ~831 uses a nested f-string with reused double-quotes, which is a
+    SyntaxError on Python < 3.12.  The fix must produce byte-identical output on 3.12 *and*
+    be valid syntax on 3.11.
+    """
+
+    def _completed_item(
+        self,
+        agent_name: str = "TestAgent",
+        task_id: str = "abc123def456xyz",
+        status: str = "COMPLETED",
+        response_text: str = "",
+        attribution: str = "autonomous",
+    ) -> dict:
+        item: dict = {
+            "agent_name": agent_name,
+            "task_id": task_id,
+            "result": {
+                "status": status,
+                "attribution": attribution,
+                "artifacts": [],
+            },
+        }
+        if response_text:
+            item["result"]["artifacts"] = [{"parts": [{"text": response_text}]}]
+        return item
+
+    def test_response_with_text_contains_quoted_text(self):
+        from amplifier_module_tool_a2a import A2ATool
+
+        item = self._completed_item(response_text="hello")
+        result = A2ATool._build_response_injection([item])
+        assert 'Response: "hello"' in result
+
+    def test_response_without_text_contains_no_response_text(self):
+        from amplifier_module_tool_a2a import A2ATool
+
+        item = self._completed_item(response_text="")
+        result = A2ATool._build_response_injection([item])
+        assert "No response text" in result
+
+    def test_response_structure_has_a2a_tags(self):
+        from amplifier_module_tool_a2a import A2ATool
+
+        item = self._completed_item(agent_name="TestAgent", response_text="hi")
+        result = A2ATool._build_response_injection([item])
+        assert result.startswith("<a2a-response>")
+        assert result.endswith("</a2a-response>")
+
+    def test_response_with_text_does_not_contain_no_response_text(self):
+        from amplifier_module_tool_a2a import A2ATool
+
+        item = self._completed_item(response_text="hello")
+        result = A2ATool._build_response_injection([item])
+        assert "No response text" not in result
+
+    def test_module_compiles_on_python_311(self):
+        """The nested f-string is a SyntaxError on Python < 3.12.  This test is the
+        decisive gate: it must pass after the fix."""
+        import os
+        import subprocess
+
+        init_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "amplifier_module_tool_a2a",
+            "__init__.py",
+        )
+        python311 = os.path.expanduser(
+            "~/.local/share/uv/python/cpython-3.11.14-linux-aarch64-gnu/bin/python3.11"
+        )
+        if not os.path.exists(python311):
+            import pytest
+
+            pytest.skip("Python 3.11 binary not available on this host")
+
+        result = subprocess.run(
+            [python311, "-m", "py_compile", init_path],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, (
+            f"py_compile failed on Python 3.11:\n{result.stderr}"
+        )

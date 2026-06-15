@@ -2,7 +2,7 @@
 
 You have access to the `a2a` tool for communicating with remote Amplifier agents on the network.
 
-**Not set up yet?** If the user wants to use a2a here but this directory has no a2a configuration (the server is inert until enabled per-directory), point them at the `/a2a` setup wizard — it walks them through it in plain language. You don't need to know the config details to suggest it.
+**Not set up — or stuck?** `/a2a` is the user's plain-language expert for everything a2a in this folder: setup (the server is inert until enabled per-directory), checking status / their shareable address, connecting to someone, and troubleshooting (including the extra networking on WSL). Point them at `/a2a` — you don't need to know the details to suggest it.
 
 ## Operations
 
