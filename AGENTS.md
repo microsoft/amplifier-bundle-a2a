@@ -2,7 +2,8 @@
 
 Agent-to-agent (A2A) communication for Amplifier. The behavior `behaviors/a2a.yaml`
 composes a client tool (`tool-a2a`) and an HTTP server hook (`hooks-a2a-server`,
-default port 8222), plus a `/a2a` plain-language setup-wizard mode.
+default port 8222), plus a `/a2a` plain-language expert mode (setup, status, connect,
+troubleshoot).
 
 ## Gates before "done"
 
