@@ -30,11 +30,24 @@ async def advertise_mdns(agent_name: str, port: int, base_url: str) -> Any | Non
         return None
 
     try:
+        from urllib.parse import urlparse
+
         # Build service info
         service_name = f"{agent_name}.{SERVICE_TYPE}"
 
         # Get local hostname for the service
         hostname = socket.gethostname()
+
+        # Resolve a reachable IPv4 address for the service record. Zeroconf
+        # registration FAILS (with an empty error) on multi-interface hosts
+        # when no addresses are supplied, so derive one from base_url. Prefer
+        # the host embedded in base_url (already the LAN-reachable address);
+        # fall back to resolving the hostname.
+        host = urlparse(base_url).hostname or hostname
+        try:
+            addr = socket.inet_aton(host)  # host is already an IP literal
+        except OSError:
+            addr = socket.inet_aton(socket.gethostbyname(host))
 
         properties = {
             "name": agent_name,
@@ -47,6 +60,7 @@ async def advertise_mdns(agent_name: str, port: int, base_url: str) -> Any | Non
             name=service_name,
             port=port,
             properties=properties,
+            addresses=[addr],
             server=f"{hostname}.local.",
         )
 
