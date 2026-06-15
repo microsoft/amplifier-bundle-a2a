@@ -332,3 +332,109 @@ class TestMount:
         # Clean up
         cleanup_fn = coordinator.register_cleanup.call_args[0][0]
         await cleanup_fn()
+
+    # --- TDD: return-value tests (FAIL before fix, PASS after) ---
+
+    async def test_mount_returns_callable_cleanup_when_enabled(self):
+        """mount() must return a callable cleanup when enabled and server starts.
+
+        TDD: FAILS before fix — mount() currently returns None implicitly.
+        PASSES after fix — mount() returns the cleanup closure.
+
+        The amplifier_core validator (validation/hook.py) calls:
+            mount_result = await mount_fn(coordinator, config)
+            if mount_result is not None and callable(mount_result):
+                await mount_result()      # tears down validation-mount server
+        Without this return value, the validation-mount server is never stopped,
+        port 8222 stays bound, and the REAL mount's server.start() fails with
+        [Errno 98] address already in use.
+        """
+        from amplifier_module_hooks_a2a_server import mount
+
+        coordinator = _make_mock_coordinator(parent_id=None)
+        config = {
+            "enabled": True,
+            "port": 0,
+            "host": "127.0.0.1",
+            "agent_name": "Return Value Test",
+            "discovery": {"mdns": False},  # avoid zeroconf in unit test
+        }
+
+        result: object = await mount(coordinator, config)  # type: ignore[assignment]
+
+        assert result is not None, (
+            "mount() must return a cleanup callable so the kernel validator can "
+            "tear down the validation-mount server before the real mount runs. "
+            "Currently returns None."
+        )
+        assert callable(result), (
+            f"mount() return value must be callable, got {type(result)}"
+        )
+
+        # Tear down
+        await result()  # type: ignore[misc]
+
+    async def test_mount_returned_cleanup_is_idempotent(self):
+        """Calling the returned cleanup twice must be safe (no-op on second call).
+
+        TDD: FAILS before fix — mount() returns None, `await None()` → TypeError.
+        PASSES after fix — cleanup has a _cleaned guard; second call is no-op.
+
+        Idempotency matters because _session_init.py ALSO does:
+            if cleanup: coordinator.register_cleanup(cleanup)
+        So the same closure ends up registered twice: once by mount() itself and
+        once by the session loader.  Both fire at session end.  The guard ensures
+        the second invocation is a silent no-op, not a double-stop.
+        """
+        from amplifier_module_hooks_a2a_server import mount
+
+        coordinator = _make_mock_coordinator(parent_id=None)
+        config = {
+            "enabled": True,
+            "port": 0,
+            "host": "127.0.0.1",
+            "agent_name": "Idempotent Cleanup Test",
+            "discovery": {"mdns": False},
+        }
+
+        cleanup: object = await mount(coordinator, config)  # type: ignore[assignment]
+
+        assert cleanup is not None, "mount() must return a callable cleanup"
+        assert callable(cleanup)
+
+        # First call — stops the server
+        await cleanup()  # type: ignore[misc]
+
+        # Second call — must NOT raise (idempotent)
+        await cleanup()  # type: ignore[misc]
+
+    async def test_mount_early_returns_give_none(self):
+        """mount() returns None for the two early-return paths (not-enabled, child session).
+
+        These paths skip all server setup, so there is nothing to clean up.
+        The kernel validator (and session loader) both gate on `if mount_result`
+        before calling cleanup, so None is correct and safe here.
+        """
+        from amplifier_module_hooks_a2a_server import mount
+
+        # Not enabled (opt-in gate)
+        coordinator_gate = _make_mock_coordinator(parent_id=None)
+        result_gate = await mount(
+            coordinator_gate,
+            {"port": 0, "host": "127.0.0.1", "agent_name": "Gate Test"},
+        )
+        assert result_gate is None, (
+            "mount() should return None when not enabled (no cleanup needed)"
+        )
+
+        # Explicit enabled=False
+        coordinator_false = _make_mock_coordinator(parent_id=None)
+        result_false = await mount(coordinator_false, {"enabled": False, "port": 0})
+        assert result_false is None
+
+        # Child session guard
+        coordinator_child = _make_mock_coordinator(parent_id="parent-abc")
+        result_child = await mount(coordinator_child, {"enabled": True, "port": 0})
+        assert result_child is None, (
+            "mount() should return None for child sessions (no cleanup needed)"
+        )
