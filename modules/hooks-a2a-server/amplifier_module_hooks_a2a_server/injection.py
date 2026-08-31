@@ -71,10 +71,13 @@ class A2AInjectionHandler:
         if new_messages:
             sections.append(self._build_message_text(new_messages))
         text = "\n\n".join(sections)
+        wrapped_text = (
+            f'<system-reminder source="hooks-a2a-server">\n{text}\n</system-reminder>'
+        )
 
         return HookResult(
             action="inject_context",
-            context_injection=text,
+            context_injection=wrapped_text,
             context_injection_role="user",
             ephemeral=True,
             suppress_output=True,

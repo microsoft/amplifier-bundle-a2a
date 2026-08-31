@@ -454,3 +454,44 @@ class TestLiveInjection:
         assert result2.action == "inject_context"
         assert result2.context_injection is not None
         assert "Bob" in result2.context_injection
+
+
+class TestInjectionWrappedInSystemReminder:
+    """The injected text must be wrapped in <system-reminder source="..."> tags
+    per the ecosystem convention (see hooks-status-context / hooks-todo-reminder
+    for the reference shape), so models can distinguish this system-injected
+    content from an actual user request."""
+
+    @pytest.mark.asyncio
+    async def test_injection_wrapped_in_system_reminder(self, tmp_path):
+        from amplifier_module_hooks_a2a_server.injection import A2AInjectionHandler
+        from amplifier_module_hooks_a2a_server.pending import PendingQueue
+
+        queue = PendingQueue(base_dir=tmp_path)
+        await queue.add_approval(
+            task_id="task-1",
+            sender_url="http://ben-laptop.local:8222",
+            sender_name="Ben's Agent",
+            message={
+                "role": "user",
+                "parts": [{"text": "What restaurant do you want tonight?"}],
+            },
+        )
+        handler = A2AInjectionHandler(queue)
+
+        result = await handler("provider:request", {})
+
+        assert result.action == "inject_context"
+        assert result.context_injection is not None
+        assert result.context_injection.startswith(
+            '<system-reminder source="hooks-a2a-server">'
+        ), (
+            f"Injection should open with the system-reminder wrapper; got: {result.context_injection!r}"
+        )
+        assert result.context_injection.endswith("</system-reminder>"), (
+            f"Injection should close with the system-reminder wrapper; got: {result.context_injection!r}"
+        )
+        # Original content survives byte-identical inside the wrapper, including
+        # its own inner <a2a-approval-request> tags.
+        assert "<a2a-approval-request>" in result.context_injection
+        assert "Ben's Agent" in result.context_injection
