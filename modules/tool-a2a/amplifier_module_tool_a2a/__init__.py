@@ -790,9 +790,12 @@ class A2ATool:
             return HookResult(action="continue")
 
         text = self._build_response_injection(completed)
+        wrapped_text = (
+            f'<system-reminder source="tool-a2a">\n{text}\n</system-reminder>'
+        )
         return HookResult(
             action="inject_context",
-            context_injection=text,
+            context_injection=wrapped_text,
             context_injection_role="user",
             ephemeral=True,
             suppress_output=True,
