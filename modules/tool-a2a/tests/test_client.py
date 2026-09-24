@@ -1,7 +1,13 @@
 """Tests for A2AClient HTTP client."""
 
 from aiohttp import web
-from aiohttp.test_utils import TestClient as AioTestClient, TestServer as AioTestServer
+from aiohttp.test_utils import TestClient as AioTestClient
+from aiohttp.test_utils import TestServer as AioTestServer
+
+LOCAL_POLICY = {
+    "allowed_hosts": ["127.0.0.1"],
+    "require_https": False,
+}
 
 
 def _make_mock_a2a_server():
@@ -55,7 +61,7 @@ class TestFetchAgentCard:
         app = _make_mock_a2a_server()
         async with AioTestClient(AioTestServer(app)) as mock:
             base_url = str(mock.make_url(""))
-            client = A2AClient(timeout=5.0)
+            client = A2AClient(timeout=5.0, outbound_policy=LOCAL_POLICY)
             try:
                 card = await client.fetch_agent_card(base_url)
                 assert card["name"] == "Mock Agent"
@@ -76,7 +82,7 @@ class TestFetchAgentCard:
 
         async with AioTestClient(AioTestServer(app)) as mock:
             base_url = str(mock.make_url(""))
-            client = A2AClient(timeout=5.0)
+            client = A2AClient(timeout=5.0, outbound_policy=LOCAL_POLICY)
             try:
                 with pytest.raises(ConnectionError, match="HTTP 500"):
                     await client.fetch_agent_card(base_url)
@@ -89,7 +95,7 @@ class TestFetchAgentCard:
         app = _make_mock_a2a_server()
         async with AioTestClient(AioTestServer(app)) as mock:
             base_url = str(mock.make_url("")) + "/"  # trailing slash
-            client = A2AClient(timeout=5.0)
+            client = A2AClient(timeout=5.0, outbound_policy=LOCAL_POLICY)
             try:
                 card = await client.fetch_agent_card(base_url)
                 assert card["name"] == "Mock Agent"
@@ -104,7 +110,7 @@ class TestSendMessage:
         app = _make_mock_a2a_server()
         async with AioTestClient(AioTestServer(app)) as mock:
             base_url = str(mock.make_url(""))
-            client = A2AClient(timeout=5.0)
+            client = A2AClient(timeout=5.0, outbound_policy=LOCAL_POLICY)
             try:
                 result = await client.send_message(base_url, "What is 2+2?")
                 assert result["status"] == "COMPLETED"
@@ -126,7 +132,7 @@ class TestSendMessage:
 
         async with AioTestClient(AioTestServer(app)) as mock:
             base_url = str(mock.make_url(""))
-            client = A2AClient(timeout=5.0)
+            client = A2AClient(timeout=5.0, outbound_policy=LOCAL_POLICY)
             try:
                 with pytest.raises(ConnectionError, match="Server error"):
                     await client.send_message(base_url, "Hello")
@@ -148,7 +154,7 @@ class TestSendMessage:
 
         async with AioTestClient(AioTestServer(app)) as mock:
             base_url = str(mock.make_url(""))
-            client = A2AClient(timeout=5.0)
+            client = A2AClient(timeout=5.0, outbound_policy=LOCAL_POLICY)
             try:
                 with pytest.raises(ConnectionError, match="HTTP 502"):
                     await client.send_message(base_url, "Hello")
@@ -163,7 +169,7 @@ class TestGetTaskStatus:
         app = _make_mock_a2a_server()
         async with AioTestClient(AioTestServer(app)) as mock:
             base_url = str(mock.make_url(""))
-            client = A2AClient(timeout=5.0)
+            client = A2AClient(timeout=5.0, outbound_policy=LOCAL_POLICY)
             try:
                 result = await client.get_task_status(base_url, "task-123")
                 assert result["id"] == "task-123"
@@ -178,7 +184,7 @@ class TestGetTaskStatus:
         app = _make_mock_a2a_server()
         async with AioTestClient(AioTestServer(app)) as mock:
             base_url = str(mock.make_url(""))
-            client = A2AClient(timeout=5.0)
+            client = A2AClient(timeout=5.0, outbound_policy=LOCAL_POLICY)
             try:
                 with pytest.raises(ValueError, match="Task not found"):
                     await client.get_task_status(base_url, "not-found")
@@ -198,7 +204,7 @@ class TestGetTaskStatus:
 
         async with AioTestClient(AioTestServer(app)) as mock:
             base_url = str(mock.make_url(""))
-            client = A2AClient(timeout=5.0)
+            client = A2AClient(timeout=5.0, outbound_policy=LOCAL_POLICY)
             try:
                 with pytest.raises(ConnectionError, match="HTTP 500"):
                     await client.get_task_status(base_url, "task-xyz")
@@ -221,8 +227,51 @@ class TestClientLifecycle:
         app = _make_mock_a2a_server()
         async with AioTestClient(AioTestServer(app)) as mock:
             base_url = str(mock.make_url(""))
-            async with A2AClient(timeout=5.0) as client:
+            async with A2AClient(timeout=5.0, outbound_policy=LOCAL_POLICY) as client:
                 card = await client.fetch_agent_card(base_url)
                 assert card["name"] == "Mock Agent"
             # After exiting the context, session should be closed
             assert client._session is None
+
+
+class TestOutboundPolicy:
+    async def test_blocks_loopback_by_default(self):
+        import pytest
+        from amplifier_module_tool_a2a.client import OutboundPolicy
+
+        with pytest.raises(ValueError, match="blocked address"):
+            await OutboundPolicy({"require_https": False}).validate(
+                "http://127.0.0.1:8222"
+            )
+
+    async def test_allows_explicit_private_host(self):
+        from amplifier_module_tool_a2a.client import OutboundPolicy
+
+        result = await OutboundPolicy(LOCAL_POLICY).validate("http://127.0.0.1:8222")
+        assert result == "http://127.0.0.1:8222"
+
+    async def test_blocks_non_http_schemes(self):
+        import pytest
+        from amplifier_module_tool_a2a.client import OutboundPolicy
+
+        with pytest.raises(ValueError, match="http or https"):
+            await OutboundPolicy().validate("file:///etc/passwd")
+
+    async def test_redirects_are_rejected(self):
+        import pytest
+        from amplifier_module_tool_a2a.client import A2AClient
+
+        app = web.Application()
+        app.router.add_get(
+            "/.well-known/agent.json",
+            lambda request: web.Response(
+                status=302, headers={"Location": "http://169.254.169.254/"}
+            ),
+        )
+        async with AioTestClient(AioTestServer(app)) as mock:
+            client = A2AClient(timeout=5.0, outbound_policy=LOCAL_POLICY)
+            try:
+                with pytest.raises(ConnectionError, match="redirects"):
+                    await client.fetch_agent_card(str(mock.make_url("")))
+            finally:
+                await client.close()

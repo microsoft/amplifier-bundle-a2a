@@ -13,7 +13,14 @@ spawn:
 tools:
   - module: tool-a2a
     source: git+https://github.com/microsoft/amplifier-bundle-a2a@main#subdirectory=modules/tool-a2a
-    config: {}
+    config:
+      outbound_policy:
+        require_https: true
+        allowed_hosts: []
+        allowed_cidrs: []
+        allow_private_networks: false
+      authentication:
+        peers: {}
 
 hooks:
   - module: hooks-a2a-server
@@ -22,6 +29,16 @@ hooks:
       port: 8222
       skills: []
       known_agents: []
+      authentication:
+        required: true
+        allow_anonymous_first_contact: false
+        max_clock_skew_seconds: 300
+        peers: {}
+      trust_tiers:
+        known:
+          tools: []
+        trusted:
+          tools: []
 
 context:
   include:

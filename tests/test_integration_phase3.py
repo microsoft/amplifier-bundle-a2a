@@ -23,6 +23,13 @@ from amplifier_module_hooks_a2a_server.registry import A2ARegistry
 from amplifier_module_hooks_a2a_server.server import A2AServer
 from amplifier_module_tool_a2a import A2ATool
 
+LOCAL_TOOL_CONFIG = {
+    "outbound_policy": {
+        "allowed_hosts": ["127.0.0.1"],
+        "require_https": False,
+    }
+}
+
 
 # --- Shared helpers (same pattern as test_integration_phase2) ---
 
@@ -67,6 +74,7 @@ def _make_phase3_server(tmp_path, contacts=None, config_overrides=None):
         "port": 0,
         "host": "127.0.0.1",
         "agent_name": "Phase3 Test Agent",
+        "authentication": {"required": False},
     }
     if config_overrides:
         config.update(config_overrides)
@@ -124,7 +132,7 @@ def _make_tool(registry):
     """Create an A2ATool wired to the given registry."""
     tool_coordinator = MagicMock()
     tool_coordinator.get_capability = MagicMock(return_value=registry)
-    return A2ATool(tool_coordinator, {})
+    return A2ATool(tool_coordinator, LOCAL_TOOL_CONFIG)
 
 
 # --- Test classes ---

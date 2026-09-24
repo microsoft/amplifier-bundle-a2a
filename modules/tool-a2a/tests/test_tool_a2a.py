@@ -1994,22 +1994,22 @@ class TestBuildResponseInjectionFormatting:
 
         item = self._completed_item(response_text="hello")
         result = A2ATool._build_response_injection([item])
-        assert 'Response: "hello"' in result
+        assert '"response": "hello"' in result
 
     def test_response_without_text_contains_no_response_text(self):
         from amplifier_module_tool_a2a import A2ATool
 
         item = self._completed_item(response_text="")
         result = A2ATool._build_response_injection([item])
-        assert "No response text" in result
+        assert '"response": ""' in result
 
-    def test_response_structure_has_a2a_tags(self):
+    def test_response_structure_is_untrusted_json(self):
         from amplifier_module_tool_a2a import A2ATool
 
         item = self._completed_item(agent_name="TestAgent", response_text="hi")
         result = A2ATool._build_response_injection([item])
-        assert result.startswith("<a2a-response>")
-        assert result.endswith("</a2a-response>")
+        assert result.startswith('{"responses":')
+        assert '"security"' in result
 
     def test_response_with_text_does_not_contain_no_response_text(self):
         from amplifier_module_tool_a2a import A2ATool

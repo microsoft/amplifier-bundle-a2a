@@ -20,6 +20,14 @@ from amplifier_module_hooks_a2a_server.registry import A2ARegistry
 from amplifier_module_hooks_a2a_server.server import A2AServer
 from amplifier_module_tool_a2a import A2ATool
 
+LOCAL_TOOL_CONFIG = {
+    "default_timeout": 10.0,
+    "outbound_policy": {
+        "allowed_hosts": ["127.0.0.1"],
+        "require_https": False,
+    },
+}
+
 
 # --- Shared helpers ---
 
@@ -107,6 +115,7 @@ class TestAddContactFromRunningServer:
             "port": 0,
             "host": "127.0.0.1",
             "agent_name": "Remote Agent",
+            "authentication": {"required": False},
         }
         remote_registry = A2ARegistry()
         remote_card = build_agent_card(remote_config)
@@ -130,7 +139,7 @@ class TestAddContactFromRunningServer:
 
             tool_coordinator = MagicMock()
             tool_coordinator.get_capability = MagicMock(return_value=local_registry)
-            tool = A2ATool(tool_coordinator, {"default_timeout": 10.0})
+            tool = A2ATool(tool_coordinator, LOCAL_TOOL_CONFIG)
 
             try:
                 result = await tool.execute(
@@ -163,6 +172,7 @@ class TestSenderIdentityFromRegistryCard:
             "port": 0,
             "host": "127.0.0.1",
             "agent_name": "Alice Agent",
+            "authentication": {"required": False},
         }
         alice_registry = A2ARegistry()
         alice_registry.contact_store = ContactStore(
@@ -180,6 +190,7 @@ class TestSenderIdentityFromRegistryCard:
             "port": 0,
             "host": "127.0.0.1",
             "agent_name": "Bob Agent",
+            "authentication": {"required": False},
         }
         bob_registry = A2ARegistry()
         bob_card = build_agent_card(bob_config)
@@ -207,7 +218,7 @@ class TestSenderIdentityFromRegistryCard:
             # Identity must come from registry.card alone.
             tool_coordinator = MagicMock()
             tool_coordinator.get_capability = MagicMock(return_value=bob_registry)
-            tool = A2ATool(tool_coordinator, {"default_timeout": 10.0})
+            tool = A2ATool(tool_coordinator, LOCAL_TOOL_CONFIG)
 
             try:
                 result = await tool.execute(

@@ -43,6 +43,7 @@ def _make_server_with_contacts(tmp_path, known_urls=None, trusted_urls=None):
         "port": 0,
         "agent_name": "Test Agent",
         "agent_description": "Test",
+        "authentication": {"required": False},
     }
     registry = A2ARegistry()
     registry.contact_store = ContactStore(path=tmp_path / "contacts.json")
@@ -85,6 +86,7 @@ def _make_server_no_contacts():
         "port": 0,
         "agent_name": "Test Agent",
         "agent_description": "Test",
+        "authentication": {"required": False},
     }
     registry = A2ARegistry()
     # contact_store and pending_queue stay None

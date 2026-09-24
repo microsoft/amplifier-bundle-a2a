@@ -138,6 +138,7 @@ def _make_server_with_contacts(
         "port": 0,
         "agent_name": "Test Agent",
         "agent_description": "Test",
+        "authentication": {"required": False},
     }
     if config_overrides:
         config.update(config_overrides)

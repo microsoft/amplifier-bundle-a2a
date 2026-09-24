@@ -21,6 +21,11 @@ from amplifier_module_hooks_a2a_server.card import build_agent_card
 from amplifier_module_hooks_a2a_server.server import A2AServer
 from amplifier_module_tool_a2a.client import A2AClient
 
+LOCAL_POLICY = {
+    "allowed_hosts": ["127.0.0.1"],
+    "require_https": False,
+}
+
 
 def _make_mock_coordinator():
     coordinator = MagicMock()
@@ -63,6 +68,7 @@ class TestFullRoundTrip:
             "agent_description": "Agent for integration testing",
             "skills": [{"name": "math", "description": "Does math"}],
             "known_agents": [],
+            "authentication": {"required": False},
         }
         registry = A2ARegistry()
         card = build_agent_card(server_config)
@@ -80,7 +86,7 @@ class TestFullRoundTrip:
                 base_url = f"http://127.0.0.1:{server.port}"
 
                 # --- Client fetches agent card ---
-                client = A2AClient(timeout=10.0)
+                client = A2AClient(timeout=10.0, outbound_policy=LOCAL_POLICY)
                 try:
                     agent_card = await client.fetch_agent_card(base_url)
                     assert agent_card["name"] == "Integration Test Agent"
@@ -188,6 +194,7 @@ class TestFullRoundTrip:
             "port": 0,
             "host": "127.0.0.1",
             "agent_name": "Remote",
+            "authentication": {"required": False},
         }
         registry = A2ARegistry()
         card = build_agent_card(server_config)
@@ -210,7 +217,13 @@ class TestFullRoundTrip:
                 )
                 tool_coordinator = MagicMock()
                 tool_coordinator.get_capability = MagicMock(return_value=tool_registry)
-                tool = A2ATool(tool_coordinator, {"default_timeout": 10.0})
+                tool = A2ATool(
+                    tool_coordinator,
+                    {
+                        "default_timeout": 10.0,
+                        "outbound_policy": LOCAL_POLICY,
+                    },
+                )
 
                 try:
                     result = await tool.execute(

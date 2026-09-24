@@ -23,6 +23,13 @@ from amplifier_module_hooks_a2a_server.server import A2AServer
 from amplifier_module_tool_a2a import A2ATool
 from amplifier_module_tool_a2a.client import A2AClient
 
+LOCAL_TOOL_CONFIG = {
+    "outbound_policy": {
+        "allowed_hosts": ["127.0.0.1"],
+        "require_https": False,
+    }
+}
+
 
 # --- Shared helpers ---
 
@@ -67,6 +74,7 @@ def _make_phase2_server(tmp_path, contacts=None, config_overrides=None):
         "port": 0,
         "host": "127.0.0.1",
         "agent_name": "Phase2 Test Agent",
+        "authentication": {"required": False},
     }
     if config_overrides:
         config.update(config_overrides)
@@ -154,7 +162,7 @@ class TestFirstContactApprovalFlow:
             # 5. Simulate approval via tool: a2a(operation="approve", agent="...")
             tool_coordinator = MagicMock()
             tool_coordinator.get_capability = MagicMock(return_value=registry)
-            tool = A2ATool(tool_coordinator, {})
+            tool = A2ATool(tool_coordinator, LOCAL_TOOL_CONFIG)
 
             result = await tool.execute(
                 {"operation": "approve", "agent": unknown_url, "tier": "known"}
@@ -211,7 +219,7 @@ class TestModeARespondFlow:
             #    a2a(operation="respond", task_id="...", message="reply")
             tool_coordinator = MagicMock()
             tool_coordinator.get_capability = MagicMock(return_value=registry)
-            tool = A2ATool(tool_coordinator, {})
+            tool = A2ATool(tool_coordinator, LOCAL_TOOL_CONFIG)
 
             result = await tool.execute(
                 {
@@ -311,7 +319,10 @@ class TestAsyncSendAndStatusPolling:
             task_id = data["id"]
 
             # 3. Client polls status — still INPUT_REQUIRED
-            client = A2AClient(timeout=5.0)
+            client = A2AClient(
+                timeout=5.0,
+                outbound_policy=LOCAL_TOOL_CONFIG["outbound_policy"],
+            )
             try:
                 polled = await client.get_task_status(base_url, task_id)
                 assert polled["status"] == "INPUT_REQUIRED"
@@ -319,7 +330,7 @@ class TestAsyncSendAndStatusPolling:
                 # 4. Simulate user responding via tool (modifies PendingQueue + registry)
                 tool_coordinator = MagicMock()
                 tool_coordinator.get_capability = MagicMock(return_value=registry)
-                tool = A2ATool(tool_coordinator, {})
+                tool = A2ATool(tool_coordinator, LOCAL_TOOL_CONFIG)
 
                 result = await tool.execute(
                     {
