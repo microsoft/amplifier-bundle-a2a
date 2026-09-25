@@ -46,6 +46,7 @@ def _make_server_with_contacts(tmp_path, contacts=None):
         "port": 0,
         "agent_name": "Test Agent",
         "agent_description": "Test",
+        "authentication": {"required": False},
     }
     registry = A2ARegistry()
     registry.contact_store = ContactStore(path=tmp_path / "contacts.json")

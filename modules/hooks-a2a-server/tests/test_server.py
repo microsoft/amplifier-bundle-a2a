@@ -32,6 +32,7 @@ def _make_server(config=None):
         "agent_name": "Test Agent",
         "agent_description": "A test agent for unit tests",
         "skills": [{"name": "testing", "description": "Good at tests"}],
+        "authentication": {"required": False},
     }
     registry = A2ARegistry()
     card = build_agent_card(config)

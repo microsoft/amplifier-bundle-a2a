@@ -47,6 +47,7 @@ def _make_server(config=None, coordinator=None):
         "port": 0,
         "agent_name": "Test Agent",
         "agent_description": "Test",
+        "authentication": {"required": False},
     }
     registry = A2ARegistry()
     card = build_agent_card(config)
@@ -62,6 +63,7 @@ def _make_server_with_contact(tmp_path, sender_url, tier="known", config=None):
         "port": 0,
         "agent_name": "Test Agent",
         "agent_description": "Test",
+        "authentication": {"required": False},
     }
     registry = A2ARegistry()
     registry.contact_store = ContactStore(path=tmp_path / "contacts.json")
@@ -91,9 +93,9 @@ def _msg_payload(text="Hello", sender_url="http://remote:9000"):
 # --- Tests ---
 
 
-class TestTrustedTierGetsAllTools:
-    async def test_trusted_tier_gets_all_tools(self):
-        """Trusted contact → child config has all parent tools."""
+class TestTrustedTierGetsNoToolsByDefault:
+    async def test_trusted_tier_gets_no_tools_by_default(self):
+        """Trusted contacts receive no tools without an explicit grant."""
         mock_session = _make_mock_session()
         server, _ = _make_server()
 
@@ -105,7 +107,7 @@ class TestTrustedTierGetsAllTools:
 
             call_kwargs = mock_cls.call_args[1]
             child_tools = call_kwargs["config"]["tools"]
-            assert child_tools == _PARENT_TOOLS
+            assert child_tools == []
 
 
 class TestKnownTierGetsFilteredTools:
@@ -122,17 +124,12 @@ class TestKnownTierGetsFilteredTools:
 
             call_kwargs = mock_cls.call_args[1]
             child_tools = call_kwargs["config"]["tools"]
-            # Only tool-filesystem and tool-search from the default whitelist
-            tool_modules = [t["module"] for t in child_tools]
-            assert "tool-filesystem" in tool_modules
-            assert "tool-search" in tool_modules
-            assert "tool-bash" not in tool_modules
-            assert "tool-web" not in tool_modules
+            assert child_tools == []
 
 
 class TestKnownTierDefaultWhitelist:
     async def test_known_tier_default_whitelist(self):
-        """Default whitelist for known tier is ["tool-filesystem", "tool-search"]."""
+        """Known contacts receive no tools by default."""
         mock_session = _make_mock_session()
         server, _ = _make_server()
 
@@ -144,8 +141,7 @@ class TestKnownTierDefaultWhitelist:
 
             call_kwargs = mock_cls.call_args[1]
             child_tools = call_kwargs["config"]["tools"]
-            tool_modules = [t["module"] for t in child_tools]
-            assert tool_modules == ["tool-filesystem", "tool-search"]
+            assert child_tools == []
 
 
 class TestCustomWhitelistFromConfig:
@@ -183,6 +179,7 @@ class TestWildcardToolsConfig:
             "trust_tiers": {
                 "known": {"tools": "*"},
             },
+            "allow_unsafe_wildcard_tools": True,
         }
         server, _ = _make_server(config=config)
 
@@ -265,5 +262,5 @@ class TestHandleSendMessagePassesTier:
 
                 call_kwargs = mock_cls.call_args[1]
                 child_tools = call_kwargs["config"]["tools"]
-                # trusted tier → all tools
-                assert child_tools == _PARENT_TOOLS
+                # trusted tier → no tools without an explicit grant
+                assert child_tools == []

@@ -44,6 +44,7 @@ def _make_server(coordinator=None):
         "port": 0,
         "agent_name": "Test Agent",
         "agent_description": "Test",
+        "authentication": {"required": False},
     }
     registry = A2ARegistry()
     card = build_agent_card(config)

@@ -1,10 +1,13 @@
 """A2A HTTP server — handles incoming requests from remote agents."""
 
+import json
 import logging
 from typing import Any
 
 from aiohttp import web
 from amplifier_core.session import AmplifierSession
+
+from .authentication import RequestAuthenticator
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +33,7 @@ class A2AServer:
         self.coordinator = coordinator
         self.config = config
         self.port: int | None = None
+        self.authenticator = RequestAuthenticator(config.get("authentication"))
 
         self.app = web.Application()
         self.app.router.add_get("/.well-known/agent.json", self.handle_agent_card)
@@ -81,10 +85,17 @@ class A2AServer:
         Phase 1: Mode C — spawn a child session to answer autonomously.
         """
         # Parse and validate request
+        raw_body = await request.read()
+        authenticated_peer, auth_error = self.authenticator.verify(request, raw_body)
+        if auth_error is not None:
+            return auth_error
+
         try:
-            body = await request.json()
-        except Exception:
+            body = json.loads(raw_body)
+        except (json.JSONDecodeError, UnicodeDecodeError):
             return web.json_response({"error": "Invalid JSON"}, status=400)
+        if not isinstance(body, dict):
+            return web.json_response({"error": "Invalid JSON object"}, status=400)
 
         message = body.get("message")
         if not message or not isinstance(message.get("parts"), list):
@@ -104,15 +115,26 @@ class A2AServer:
             return web.json_response({"error": "Empty message text"}, status=400)
 
         # Extract sender info (used by contact check and confidence escalation)
-        sender_url = body.get("sender_url", "")
+        claimed_sender_url = body.get("sender_url", "")
         sender_name = body.get("sender_name", "Unknown Agent")
+        if authenticated_peer is not None:
+            if (
+                claimed_sender_url
+                and claimed_sender_url != authenticated_peer.sender_url
+            ):
+                return web.json_response(
+                    {"error": "sender_url does not match authenticated identity"},
+                    status=403,
+                )
+            sender_url = authenticated_peer.sender_url
+        else:
+            sender_url = claimed_sender_url
 
         # First-contact approval check (Phase 2)
         contact_store = getattr(self.registry, "contact_store", None)
         pending_queue = getattr(self.registry, "pending_queue", None)
 
         if contact_store is not None:
-            sender_url = body.get("sender_url", "")
             if not sender_url:
                 return web.json_response(
                     {"error": "Missing required field: sender_url"},
@@ -120,7 +142,12 @@ class A2AServer:
                 )
             sender_name = body.get("sender_name", "Unknown Agent")
 
-            if not contact_store.is_known(sender_url):
+            # Anonymous first-contact mode is an explicit onboarding mechanism.
+            # It never grants the tier of a stored contact based on a claimed URL.
+            is_authenticated = (
+                authenticated_peer is not None or not self.authenticator.required
+            )
+            if not is_authenticated or not contact_store.is_known(sender_url):
                 task_id = self.registry.create_task(message)
                 if pending_queue is not None:
                     await pending_queue.add_approval(
@@ -131,9 +158,13 @@ class A2AServer:
 
             # Determine contact's trust tier (Phase 2)
             contact = contact_store.get_contact(sender_url)
-            tier = contact["tier"] if contact else "trusted"
+            tier = contact["tier"] if contact else "known"
         else:
-            tier = "trusted"  # Default when no contact_store
+            if authenticated_peer is None and self.authenticator.required:
+                return web.json_response(
+                    {"error": "Authenticated contact store is required"}, status=503
+                )
+            tier = "trusted" if not self.authenticator.required else "known"
 
         # Mode A: known contacts get queued for user response
         if tier == "known":
@@ -221,14 +252,18 @@ class A2AServer:
         tier_config = self.config.get("trust_tiers", {}).get(tier, {})
         allowed_tools = tier_config.get("tools", None)
 
-        # Defaults
+        # Secure defaults: remote sessions have no tools unless explicitly granted.
         if allowed_tools is None:
-            if tier == "trusted":
-                allowed_tools = "*"
-            else:
-                allowed_tools = ["tool-filesystem", "tool-search"]
+            allowed_tools = []
 
         if allowed_tools == "*":
+            if not self.config.get("allow_unsafe_wildcard_tools", False):
+                logger.warning(
+                    "Ignoring trust_tiers.%s.tools='*' because "
+                    "allow_unsafe_wildcard_tools is not enabled",
+                    tier,
+                )
+                return []
             return parent_tools
 
         # Filter: only include tools whose module name is in the whitelist

@@ -43,13 +43,18 @@ Modes escalate automatically: C (can't answer?) -> A (user is active?) -> B. Use
 
 ### Trust & Contacts
 
-- **Unknown agents** are blocked until the user approves them
+- **Unknown agents** are blocked until the user configures a shared credential and
+  approves them
 - **Known contacts** require the user's input for every message (Mode A)
 - **Trusted contacts** get autonomous responses (Mode C), escalating to the user only when the agent can't answer confidently
+- Sender URLs are display identifiers only; trust is granted only after HMAC request
+  authentication succeeds
 
 ### Per-Contact Capability Scoping
 
-Trusted contacts' requests are handled by sessions with full tool access. Known contacts get a restricted whitelist (read-only filesystem, search — no bash, no web). Configurable per tier.
+Remote requests receive no tools by default, including trusted contacts. Grant only
+the exact modules a peer needs under `trust_tiers`. The legacy `"*"` grant is
+ignored unless `allow_unsafe_wildcard_tools: true` is also set.
 
 ### Response Attribution
 
@@ -112,12 +117,35 @@ overrides:
         mdns: true                  # LAN auto-discovery (zeroconf is installed by default)
       known_agents:
         - name: "Friend's Agent"
-          url: "http://friend-laptop.local:8223"
+          url: "https://friend.example"
+      authentication:
+        peers:
+          friend-to-me:
+            sender_url: "https://friend.example"
+            secret: "${A2A_FRIEND_SHARED_SECRET}"
+      trust_tiers:
+        trusted:
+          tools: []                 # explicitly add only required modules
+
+  tool-a2a:
+    config:
+      outbound_policy:
+        allowed_hosts: ["friend.example"]
+      authentication:
+        peers:
+          "https://friend.example":
+            key_id: "me-to-friend"
+            secret: "${A2A_ME_SHARED_SECRET}"
 ```
 
 A project-level `.amplifier/settings.yaml` overrides your global settings, so each directory gets its own a2a identity, port, and contacts. Because this file holds your machine-specific identity and contact list, keep it **local** — add `.amplifier/settings.yaml` (or `.amplifier/`) to `.gitignore` in shared repos rather than committing it.
 
 > **Crossing networks?** mDNS only finds peers on the same LAN. For Tailscale / VPN / internet, list peers under `known_agents` with a reachable URL instead of relying on discovery.
+
+> **LAN HTTP migration:** HTTPS is required by default. For a peer that cannot yet
+> serve HTTPS, explicitly allow only that hostname and set `require_https: false`.
+> An `allowed_hosts` entry also authorizes that host's private IP addresses. Prefer
+> a reverse proxy with TLS for long-lived deployments.
 
 ### For local development
 
@@ -260,8 +288,8 @@ amplifier-bundle-a2a/
 
 1. **On session start**, *if `enabled: true`*, the hook module starts an HTTP server and advertises via mDNS (it stays inert otherwise)
 2. **When sending**, the tool resolves the agent URL, fetches the Agent Card, and sends via HTTP
-3. **When receiving**, the server checks the sender against the contact list, routes to Mode C (autonomous) or Mode A (queue for user), and returns an A2A task
-4. **For live sessions**, the injection handler presents pending messages on each LLM turn (Mode B)
+3. **When receiving**, the server verifies the HMAC signature, binds the configured key to a sender URL, then checks the authenticated sender against the contact list
+4. **For live sessions**, the injection handler presents pending items as escaped, explicitly untrusted JSON data; remote fields never become tool instructions
 5. **For async responses**, a background poller detects completed remote tasks and injects them into the sender's session
 
 ## Configuration
@@ -280,8 +308,13 @@ amplifier-bundle-a2a/
 | `realtime_response` | `false` | Whether this agent can respond in real-time |
 | `confidence_evaluation` | `true` | Enable LLM confidence check for Mode C |
 | `discovery.mdns` | `true` | Enable mDNS advertisement |
-| `trust_tiers.trusted.tools` | `"*"` | Tool whitelist for trusted contacts |
-| `trust_tiers.known.tools` | `["tool-filesystem", "tool-search"]` | Tool whitelist for known contacts |
+| `authentication.required` | `true` | Reject unsigned message requests |
+| `authentication.allow_anonymous_first_contact` | `false` | Permit unsigned onboarding requests; they never inherit stored trust |
+| `authentication.max_clock_skew_seconds` | `300` | Signature timestamp window and replay-cache lifetime |
+| `authentication.peers` | `{}` | Map inbound key IDs to `{sender_url, secret}` |
+| `trust_tiers.trusted.tools` | `[]` | Explicit tool whitelist for authenticated trusted contacts |
+| `trust_tiers.known.tools` | `[]` | Explicit tool whitelist for known contacts |
+| `allow_unsafe_wildcard_tools` | `false` | Required in addition to `tools: "*"`; grants all parent tools and is not recommended |
 
 ### Client (tool-a2a)
 
@@ -291,6 +324,36 @@ amplifier-bundle-a2a/
 | `poll_interval` | `5` | Background poller interval (seconds) |
 | `sender_url` | *(auto-derived)* | Auto-derived from the server hook's registry. Only needed as an escape hatch if the tool can't find the hook |
 | `sender_name` | *(auto-derived)* | Auto-derived from the server hook's registry. Only needed as an escape hatch if the tool can't find the hook |
+| `authentication.peers` | `{}` | Map normalized destination URLs to `{key_id, secret}` for signed sends |
+| `outbound_policy.require_https` | `true` | Require TLS unless the destination hostname is explicitly allowed |
+| `outbound_policy.allowed_hosts` | `[]` | Exact or glob hostnames authorized for A2A egress, including private addresses |
+| `outbound_policy.allowed_cidrs` | `[]` | Explicitly authorized destination networks |
+| `outbound_policy.allow_private_networks` | `false` | Broadly allow private addresses; prefer narrow host/CIDR entries |
+
+All client requests disable redirects. Hostnames are resolved and checked again at
+connection time; loopback, link-local, private, multicast, reserved, and unspecified
+addresses are blocked unless explicitly authorized.
+
+### Security migration
+
+Existing installations must configure credentials on both peers before messages will
+flow:
+
+1. Generate two independent high-entropy secrets, one for each direction.
+2. On each receiving server, add the remote key ID, expected `sender_url`, and secret
+   under `hooks-a2a-server.config.authentication.peers`.
+3. On each sender, add the destination URL, key ID, and matching secret under
+   `tool-a2a.config.authentication.peers`.
+4. Add the destination hostname or CIDR to the sender's outbound policy. Keep HTTPS
+   enabled whenever possible.
+5. Review `trust_tiers`; both tiers now default to no tools. Add only purpose-specific
+   modules. Existing `tools: "*"` entries also require the explicit unsafe override.
+
+For a short onboarding window, a receiver may set
+`allow_anonymous_first_contact: true`. Such requests are always treated as unknown,
+even when they claim a stored contact URL. Setting `authentication.required: false`
+restores legacy unsigned behavior and is intentionally insecure; use it only on an
+isolated loopback test deployment.
 
 ## Network Requirements
 

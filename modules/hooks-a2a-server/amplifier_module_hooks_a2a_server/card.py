@@ -10,7 +10,7 @@ def _default_agent_name() -> str:
     try:
         username = getpass.getuser()
         return f"{username}'s Agent"
-    except Exception:
+    except OSError:
         return "Amplifier Agent"
 
 
@@ -32,7 +32,7 @@ def build_agent_card(config: dict[str, Any]) -> dict[str, Any]:
             # for the mDNS record — keep the card URL consistent with that.
             if not url_host.endswith(".local"):
                 url_host = f"{url_host}.local"
-        except Exception:
+        except OSError:
             url_host = "127.0.0.1"
     else:
         url_host = host
@@ -53,6 +53,10 @@ def build_agent_card(config: dict[str, Any]) -> dict[str, Any]:
         "capabilities": {
             "streaming": False,
             "realtimeResponse": config.get("realtime_response", False),
+            "authentication": {
+                "schemes": ["hmac-sha256"],
+                "required": config.get("authentication", {}).get("required", True),
+            },
         },
         "skills": config.get("skills", []),
     }
